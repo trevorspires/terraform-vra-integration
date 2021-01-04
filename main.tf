@@ -38,9 +38,9 @@
 # REST API running on the NSX manager.
 #
 provider "nsxt" {
-  host                  = "192.168.200.11"
-  username              = "admin"
-  password              = "myPassword1!myPassword1!"
+  host                  = var.nsx_manager
+  username              = var.nsx_username
+  password              = var.nsx_password
   allow_unverified_ssl  = true
   max_retries           = 10
   retry_min_delay       = 500
@@ -71,23 +71,23 @@ variable "nsx_tag" {
 # Gateways will be connected to the T0 Gateway
 #
 data "nsxt_policy_edge_cluster" "demo" {
-  display_name = "Edge-Cluster"
+  display_name = "sitea-edge-cluster"
 }
 
 data "nsxt_policy_transport_zone" "overlay_tz" {
-  display_name = "Overlay-TZ"
+  display_name = "OVERLAY-SITEA-TZ"
 }
 
 data "nsxt_policy_tier0_gateway" "t0_gateway" {
-  display_name = "TF-T0-Gateway"
+  display_name = var.nsx_t0_name
 }
 
 #
 # Create a DHCP Profile that is used later
 #
-resource "nsxt_policy_dhcp_server" "tier_dhcp" {
-  nsx_id           = "tier_dhcp"
-  display_name     = "tier_dhcp"
+resource "nsxt_policy_dhcp_server" "tf_dhcp" {
+  nsx_id           = "tf_dhcp"
+  display_name     = "tf_dhcp"
   description      = "DHCP server servicing all 3 Segments"
   server_addresses = ["12.12.99.2/24"]
 }
@@ -104,12 +104,11 @@ resource "nsxt_policy_tier1_gateway" "t1_gateway" {
   display_name              = "TF_T1"
   description               = "Tier1 provisioned by Terraform"
   edge_cluster_path         = data.nsxt_policy_edge_cluster.demo.path
-  dhcp_config_path          = nsxt_policy_dhcp_server.tier_dhcp.path
+  dhcp_config_path          = nsxt_policy_dhcp_server.tf_dhcp.path
   failover_mode             = "PREEMPTIVE"
   default_rule_logging      = "false"
   enable_firewall           = "false"
   enable_standby_relocation = "false"
-  force_whitelisting        = "true"
   tier0_path                = data.nsxt_policy_tier0_gateway.t0_gateway.path
   route_advertisement_types = ["TIER1_STATIC_ROUTES", "TIER1_CONNECTED"]
   pool_allocation           = "ROUTING"
@@ -557,168 +556,168 @@ data "nsxt_policy_realization_info" "w_info" {
 # Reconfiguration is a vCenter operation. To achieve this, use the vCenter
 # provider
 
-provider "vsphere" {
-  user                 = "administrator@vsphere.local"
-  password             = "myPassword1!"
-  vsphere_server       = "192.168.223.97"
-  allow_unverified_ssl = true
-}
-
-data "vsphere_datacenter" "datacenter" {
-  name = "Datacenter"
-}
-
-# Data source for the Segments we created earlier
-data "vsphere_network" "tf_web" {
-  name          = "web-tier"
-  datacenter_id = data.vsphere_datacenter.datacenter.id
-  depends_on    = [data.nsxt_policy_segment_realization.web_info]
-}
-
-data "vsphere_network" "tf_app" {
-  name          = "app-tier"
-  datacenter_id = data.vsphere_datacenter.datacenter.id
-  depends_on    = [data.nsxt_policy_segment_realization.app_info]
-}
-
-data "vsphere_network" "tf_db" {
-  name          = "db-tier"
-  datacenter_id = data.vsphere_datacenter.datacenter.id
-  depends_on    = [data.nsxt_policy_segment_realization.db_info]
-}
-
-data "vsphere_compute_cluster" "cluster-east" {
-  name          = "wcp-cluster-east"
-  datacenter_id = data.vsphere_datacenter.datacenter.id
-}
-
-data "vsphere_compute_cluster" "cluster-west" {
-  name          = "wcp-cluster-west"
-  datacenter_id = data.vsphere_datacenter.datacenter.id
-}
-
-data "vsphere_datastore" "datastore20" {
-  name          = "datastore20"
-  datacenter_id = data.vsphere_datacenter.datacenter.id
-}
-
-data "vsphere_datastore" "datastore21" {
-  name          = "datastore21"
-  datacenter_id = data.vsphere_datacenter.datacenter.id
-}
-
-data "vsphere_virtual_machine" "vm-template" {
-  name          = "base"
-  datacenter_id = data.vsphere_datacenter.datacenter.id
-}
-
-resource "vsphere_virtual_machine" "web-vm" {
-  name             = "web-vm"
-  datastore_id     = data.vsphere_datastore.datastore20.id
-  resource_pool_id = data.vsphere_compute_cluster.cluster-east.resource_pool_id
-  guest_id         = "centos8_64Guest"
-  firmware         = "efi"
-  network_interface {
-    network_id = data.vsphere_network.tf_web.id
-  }
-  clone {
-    template_uuid = data.vsphere_virtual_machine.vm-template.id
-  }
-  disk {
-    label            = "web-vm.vmdk"
-    size             = 20
-    thin_provisioned = true
-  }
-}
-
-resource "vsphere_virtual_machine" "app-vm" {
-  name             = "app-vm"
-  datastore_id     = data.vsphere_datastore.datastore21.id
-  resource_pool_id = data.vsphere_compute_cluster.cluster-west.resource_pool_id
-  guest_id         = "centos8_64Guest"
-  firmware         = "efi"
-  network_interface {
-    network_id = data.vsphere_network.tf_app.id
-  }
-  clone {
-    template_uuid = data.vsphere_virtual_machine.vm-template.id
-  }
-  disk {
-    label            = "app-vm.vmdk"
-    size             = 20
-    thin_provisioned = true
-  }
-}
-
-resource "vsphere_virtual_machine" "db-vm" {
-  name             = "db-vm"
-  datastore_id     = data.vsphere_datastore.datastore21.id
-  resource_pool_id = data.vsphere_compute_cluster.cluster-west.resource_pool_id
-  guest_id         = "centos8_64Guest"
-  firmware         = "efi"
-  network_interface {
-    network_id = data.vsphere_network.tf_db.id
-  }
-  clone {
-    template_uuid = data.vsphere_virtual_machine.vm-template.id
-  }
-  disk {
-    label            = "db-vm.vmdk"
-    size             = 20
-    thin_provisioned = true
-  }
-}
-
-# The 3 VMs available in the NSX Inventory
-data "nsxt_policy_vm" "web_vm" {
-  display_name = "web-vm"
-  depends_on    = [vsphere_virtual_machine.web-vm]
-}
-
-data "nsxt_policy_vm" "app_vm" {
-  display_name = "app-vm"
-  depends_on    = [vsphere_virtual_machine.app-vm]
-}
-
-data "nsxt_policy_vm" "db_vm" {
-  display_name = "db-vm"
-  depends_on    = [vsphere_virtual_machine.db-vm]
-}
-
-# Assign the right tags to the VMs so that they get included in the
-# dynamic groups created above
-resource "nsxt_policy_vm_tags" "web_vm_tag" {
-  instance_id = data.nsxt_policy_vm.web_vm.instance_id
-  tag {
-    scope = "tier"
-    tag   = "web"
-  }
-  tag {
-    scope = var.nsx_tag_scope
-    tag   = var.nsx_tag
-  }
-}
-
-resource "nsxt_policy_vm_tags" "app_vm_tag" {
-  instance_id = data.nsxt_policy_vm.app_vm.instance_id
-  tag {
-    scope = "tier"
-    tag   = "app"
-  }
-  tag {
-    scope = var.nsx_tag_scope
-    tag   = var.nsx_tag
-  }
-}
-
-resource "nsxt_policy_vm_tags" "db_vm_tag" {
-  instance_id = data.nsxt_policy_vm.db_vm.instance_id
-  tag {
-    scope = "tier"
-    tag   = "db"
-  }
-  tag {
-    scope = var.nsx_tag_scope
-    tag   = var.nsx_tag
-  }
-}
+#provider "vsphere" {
+#  user                 = "administrator@vsphere.local"
+#  password             = "myPassword1!"
+#  vsphere_server       = "192.168.223.97"
+#  allow_unverified_ssl = true
+#}
+#
+#data "vsphere_datacenter" "datacenter" {
+#  name = "Datacenter"
+#}
+#
+## Data source for the Segments we created earlier
+#data "vsphere_network" "tf_web" {
+#  name          = "web-tier"
+#  datacenter_id = data.vsphere_datacenter.datacenter.id
+#  depends_on    = [data.nsxt_policy_segment_realization.web_info]
+#}
+#
+#data "vsphere_network" "tf_app" {
+#  name          = "app-tier"
+#  datacenter_id = data.vsphere_datacenter.datacenter.id
+#  depends_on    = [data.nsxt_policy_segment_realization.app_info]
+#}
+#
+#data "vsphere_network" "tf_db" {
+#  name          = "db-tier"
+#  datacenter_id = data.vsphere_datacenter.datacenter.id
+#  depends_on    = [data.nsxt_policy_segment_realization.db_info]
+#}
+#
+#data "vsphere_compute_cluster" "cluster-east" {
+#  name          = "wcp-cluster-east"
+#  datacenter_id = data.vsphere_datacenter.datacenter.id
+#}
+#
+#data "vsphere_compute_cluster" "cluster-west" {
+#  name          = "wcp-cluster-west"
+#  datacenter_id = data.vsphere_datacenter.datacenter.id
+#}
+#
+#data "vsphere_datastore" "datastore20" {
+#  name          = "datastore20"
+#  datacenter_id = data.vsphere_datacenter.datacenter.id
+#}
+#
+#data "vsphere_datastore" "datastore21" {
+#  name          = "datastore21"
+#  datacenter_id = data.vsphere_datacenter.datacenter.id
+#}
+#
+#data "vsphere_virtual_machine" "vm-template" {
+#  name          = "base"
+#  datacenter_id = data.vsphere_datacenter.datacenter.id
+#}
+#
+#resource "vsphere_virtual_machine" "web-vm" {
+#  name             = "web-vm"
+#  datastore_id     = data.vsphere_datastore.datastore20.id
+#  resource_pool_id = data.vsphere_compute_cluster.cluster-east.resource_pool_id
+#  guest_id         = "centos8_64Guest"
+#  firmware         = "efi"
+#  network_interface {
+#    network_id = data.vsphere_network.tf_web.id
+#  }
+#  clone {
+#    template_uuid = data.vsphere_virtual_machine.vm-template.id
+#  }
+#  disk {
+#    label            = "web-vm.vmdk"
+#    size             = 20
+#    thin_provisioned = true
+#  }
+#}
+#
+#resource "vsphere_virtual_machine" "app-vm" {
+#  name             = "app-vm"
+#  datastore_id     = data.vsphere_datastore.datastore21.id
+#  resource_pool_id = data.vsphere_compute_cluster.cluster-west.resource_pool_id
+#  guest_id         = "centos8_64Guest"
+#  firmware         = "efi"
+#  network_interface {
+#    network_id = data.vsphere_network.tf_app.id
+#  }
+#  clone {
+#    template_uuid = data.vsphere_virtual_machine.vm-template.id
+#  }
+#  disk {
+#    label            = "app-vm.vmdk"
+#    size             = 20
+#    thin_provisioned = true
+#  }
+#}
+#
+#resource "vsphere_virtual_machine" "db-vm" {
+#  name             = "db-vm"
+#  datastore_id     = data.vsphere_datastore.datastore21.id
+#  resource_pool_id = data.vsphere_compute_cluster.cluster-west.resource_pool_id
+#  guest_id         = "centos8_64Guest"
+#  firmware         = "efi"
+#  network_interface {
+#    network_id = data.vsphere_network.tf_db.id
+#  }
+#  clone {
+#    template_uuid = data.vsphere_virtual_machine.vm-template.id
+#  }
+#  disk {
+#    label            = "db-vm.vmdk"
+#    size             = 20
+#    thin_provisioned = true
+#  }
+#}
+#
+## The 3 VMs available in the NSX Inventory
+#data "nsxt_policy_vm" "web_vm" {
+#  display_name = "web-vm"
+#  depends_on    = [vsphere_virtual_machine.web-vm]
+#}
+#
+#data "nsxt_policy_vm" "app_vm" {
+#  display_name = "app-vm"
+#  depends_on    = [vsphere_virtual_machine.app-vm]
+#}
+#
+#data "nsxt_policy_vm" "db_vm" {
+#  display_name = "db-vm"
+#  depends_on    = [vsphere_virtual_machine.db-vm]
+#}
+#
+## Assign the right tags to the VMs so that they get included in the
+## dynamic groups created above
+#resource "nsxt_policy_vm_tags" "web_vm_tag" {
+#  instance_id = data.nsxt_policy_vm.web_vm.instance_id
+#  tag {
+#    scope = "tier"
+#    tag   = "web"
+#  }
+#  tag {
+#    scope = var.nsx_tag_scope
+#    tag   = var.nsx_tag
+#  }
+#}
+#
+#resource "nsxt_policy_vm_tags" "app_vm_tag" {
+#  instance_id = data.nsxt_policy_vm.app_vm.instance_id
+#  tag {
+#    scope = "tier"
+#    tag   = "app"
+#  }
+#  tag {
+#    scope = var.nsx_tag_scope
+#    tag   = var.nsx_tag
+#  }
+#}
+#
+#resource "nsxt_policy_vm_tags" "db_vm_tag" {
+#  instance_id = data.nsxt_policy_vm.db_vm.instance_id
+#  tag {
+#    scope = "tier"
+#    tag   = "db"
+#  }
+#  tag {
+#    scope = var.nsx_tag_scope
+#    tag   = var.nsx_tag
+#  }
+#}
