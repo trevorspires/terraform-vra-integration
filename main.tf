@@ -239,6 +239,42 @@ resource "nsxt_policy_segment" "db" {
   }
 }
 
+resource "nsxt_policy_segment" "web" {
+  nsx_id              = "web-tier"
+  display_name        = "web-tier"
+  description         = "Terraform provisioned Web Segment"
+  connectivity_path   = nsxt_policy_tier1_gateway.t1_gateway.path
+  transport_zone_path = data.nsxt_policy_transport_zone.overlay_tz.path
+
+  subnet {
+    cidr        = "12.12.4.1/24"
+    dhcp_ranges = ["12.12.4.100-12.12.4.160"]
+
+    dhcp_v4_config {
+      server_address = "12.12.4.2/24"
+      lease_time     = 36000
+
+      dhcp_option_121 {
+        network  = "6.6.6.0/24"
+        next_hop = "1.1.1.21"
+      }
+    }
+  }
+
+  advanced_config {
+    connectivity = "ON"
+  }
+
+  tag {
+    scope = var.nsx_tag_scope
+    tag   = var.nsx_tag
+  }
+  tag {
+    scope = "tier"
+    tag   = "web"
+  }
+}
+
 #
 # This part of the example shows creating Groups with dynamic membership
 # criteria
