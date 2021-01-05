@@ -239,10 +239,10 @@ resource "nsxt_policy_segment" "db" {
   }
 }
 
-resource "nsxt_policy_segment" "web" {
-  nsx_id              = "web-tier"
-  display_name        = "web-tier"
-  description         = "Terraform provisioned Web Segment"
+resource "nsxt_policy_segment" "test" {
+  nsx_id              = "test"
+  display_name        = "test"
+  description         = "Terraform provisioned Test Segment"
   connectivity_path   = nsxt_policy_tier1_gateway.t1_gateway.path
   transport_zone_path = data.nsxt_policy_transport_zone.overlay_tz.path
 
